@@ -10,8 +10,8 @@ SELECTION-SCREEN BEGIN OF BLOCK bl1 WITH FRAME TITLE text-001.
 SELECTION-SCREEN END OF BLOCK bl1.
 
 SELECTION-SCREEN BEGIN OF BLOCK bl2 WITH FRAME TITLE text-002.
-  PARAMETERS rb_tech RADIOBUTTON GROUP gr1 DEFAULT 'X'.
-  PARAMETERS rb_text RADIOBUTTON GROUP gr1.
+  PARAMETERS rb_tech RADIOBUTTON GROUP gr1.
+  PARAMETERS rb_text RADIOBUTTON GROUP gr1 DEFAULT 'X'.
 SELECTION-SCREEN END OF BLOCK bl2.
 
 **********************************************************************
@@ -31,6 +31,13 @@ DATA: w_tab         TYPE STANDARD TABLE OF abap_compdescr,
       w_tref        TYPE REF TO data,
       w_dy_line     TYPE REF TO data.
 
-FIELD-SYMBOLS: <dyn_tab>   TYPE STANDARD TABLE,
+TYPES: BEGIN OF tt_mapp,
+         col  TYPE abap_compname,
+         role TYPE AGR_NAME,
+       END OF tt_mapp.
+DATA: it_mapp TYPE SORTED TABLE OF tt_mapp WITH UNIQUE key col,
+      count TYPE string.
+
+FIELD-SYMBOLS: <dyn_tab> TYPE ANY TABLE ,
                <dyn_wa>,
                <dyn_field>.
