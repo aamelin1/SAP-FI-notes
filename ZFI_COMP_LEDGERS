@@ -1,0 +1,448 @@
+*&---------------------------------------------------------------------*
+*& Report ZFI_COMP_LEDGERS
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+report ZFI_COMP_LEDGERS.
+
+
+tables: ACDOCA.
+
+*&---------------------------------------------------------------------*
+selection-screen begin of block BL1 with frame title text-001.
+  select-options SO_BUKRS for ACDOCA-RBUKRS no intervals no-extension memory id BUK obligatory.
+  select-options SO_GJAHR for ACDOCA-GJAHR no intervals no-extension default SY-DATUM+0(4) obligatory.
+  select-options SO_POPER for ACDOCA-POPER no intervals no-extension default SY-DATUM+4(2).
+  select-options SH_POPER for ACDOCA-POPER no-extension default SY-DATUM+4(2).
+  select-options SO_RACCT for ACDOCA-RACCT.
+  parameters R_BS radiobutton group GR1  user-command CMD.
+  parameters R_PL radiobutton group GR1.
+  parameters R_OSV radiobutton group GR1 default 'X'.
+selection-screen end of block BL1.
+
+selection-screen begin of block BL2 with frame title text-002.
+  select-options S1_RLDNR for ACDOCA-RLDNR no intervals no-extension default '0L' obligatory.
+  select-options S2_RLDNR for ACDOCA-RLDNR no intervals no-extension default '2L'.
+selection-screen end of block BL2.
+
+selection-screen begin of block BL3 with frame title text-003.
+  parameters P_BRL as checkbox default ABAP_TRUE.
+  parameters P_USD as checkbox default ABAP_FALSE.
+selection-screen end of block BL3.
+
+selection-screen begin of block BL4 with frame title text-004.
+  parameters P_LANGU like SY-LANGU default SY-LANGU obligatory.
+selection-screen end of block BL4.
+
+*&---------------------------------------------------------------------*
+data: FCAT         type LVC_T_FCAT,
+      HCAT         type LVC_S_FCAT,
+      GLAY         type LVC_S_GLAY,
+      GS_LAYOUT_FM type LVC_S_LAYO,
+      EVENTS       type SLIS_T_EVENT,
+      EVENT        type SLIS_ALV_EVENT.
+
+data: IT_REP_TEMP type sorted table of ZFI_COMP_LEDGERS with non-unique key RLDNR RBUKRS GJAHR POPER RACCT,
+      IT_REP      type standard table of ZFI_COMP_LEDGERS,
+      LS_REP      like line of IT_REP.
+
+*&---------------------------------------------------------------------*
+initialization.
+
+*&---------------------------------------------------------------------*
+at selection-screen output .
+  if R_BS = 'X'.
+    loop at screen.
+      if SCREEN-NAME cs 'SH_POPER'.
+        SCREEN-ACTIVE = 0.
+        modify screen.
+      endif.
+      if SCREEN-NAME cs 'SO_POPER'.
+        SCREEN-ACTIVE = 1.
+        modify screen.
+      endif.
+    endloop.
+  else.
+    loop at screen .
+      if SCREEN-NAME cs 'SO_POPER'.
+        SCREEN-ACTIVE = 0.
+        modify screen.
+      endif.
+      if SCREEN-NAME cs 'SH_POPER'.
+        SCREEN-ACTIVE = 1.
+        modify screen.
+      endif.                .
+    endloop.
+  endif.
+
+*&---------------------------------------------------------------------*
+start-of-selection.
+
+
+  perform GET_DATA.
+  perform SHOW_ALV.
+
+form CHECK_INPUT.
+
+  if SH_POPER-HIGH is initial.
+    SH_POPER-HIGH = SH_POPER-LOW.
+  endif.
+
+endform.
+
+*&---------------------------------------------------------------------*
+form GET_DATA .
+
+  case 'X'.
+    when R_BS.
+      select
+        RLDNR,
+        RBUKRS,
+        GJAHR,
+        RACCT,
+        GLACCOUNT_TYPE,
+        sum( HSL ) as 01_HSL,
+        RHCUR as 01_RHCUR,
+        sum( KSL ) as 01_KSL,
+        RKCUR as 01_RKCUR
+      from ACDOCA
+        into corresponding fields of table @IT_REP_TEMP
+        where RBUKRS in @SO_BUKRS
+          and GJAHR in @SO_GJAHR
+          and POPER <= @SO_POPER-LOW
+          and ( RLDNR in @S1_RLDNR or RLDNR in @S2_RLDNR )
+          and RACCT in @SO_RACCT
+      group by
+        RLDNR,
+        RBUKRS,
+        GJAHR,
+        RACCT,
+        GLACCOUNT_TYPE,
+        RHCUR,
+        RKCUR.
+
+    when R_PL.
+      select
+        RLDNR,
+        RBUKRS,
+        GJAHR,
+        RACCT,
+        GLACCOUNT_TYPE,
+        sum( HSL ) as 01_HSL,
+        RHCUR as 01_RHCUR,
+        sum( KSL ) as 01_KSL,
+        RKCUR as 01_RKCUR
+      from ACDOCA
+        into corresponding fields of table @IT_REP_TEMP
+        where RBUKRS in @SO_BUKRS
+          and GJAHR in @SO_GJAHR
+          and POPER in @SH_POPER
+          and ( RLDNR in @S1_RLDNR or RLDNR in @S2_RLDNR )
+          and RACCT in @SO_RACCT
+      group by
+        RLDNR,
+        RBUKRS,
+        GJAHR,
+        RACCT,
+        GLACCOUNT_TYPE,
+        RHCUR,
+        RKCUR.
+    when R_OSV.
+*      St End Balances + Turnovers
+      select
+        RLDNR,
+        RBUKRS,
+        GJAHR,
+        POPER,
+        DRCRK,
+        RACCT,
+        GLACCOUNT_TYPE,
+        sum( HSL ) as 01_HSL,
+        RHCUR as 01_RHCUR,
+        sum( KSL ) as 01_KSL,
+        RKCUR as 01_RKCUR
+      from ACDOCA
+        into corresponding fields of table @IT_REP_TEMP
+        where RBUKRS in @SO_BUKRS
+          and GJAHR in @SO_GJAHR
+          and POPER <= @SH_POPER-HIGH
+          and ( RLDNR in @S1_RLDNR or RLDNR in @S2_RLDNR )
+          and RACCT in @SO_RACCT
+      group by
+        RLDNR,
+        RBUKRS,
+        GJAHR,
+        POPER,
+        DRCRK,
+        RACCT,
+        GLACCOUNT_TYPE,
+        RHCUR,
+        RKCUR.
+    when others.
+  endcase.
+
+
+  loop at IT_REP_TEMP assigning field-symbol(<FS_REP_TEMP>).
+    clear: LS_REP.
+    LS_REP-RBUKRS = <FS_REP_TEMP>-RBUKRS.
+    LS_REP-GJAHR = <FS_REP_TEMP>-GJAHR.
+*      ls_rep-poper = <fs_rep_temp>-poper.
+    LS_REP-RACCT = <FS_REP_TEMP>-RACCT.
+    append LS_REP to IT_REP.
+  endloop.
+  sort IT_REP by RBUKRS GJAHR POPER RACCT.
+  delete adjacent duplicates from IT_REP comparing RBUKRS GJAHR POPER RACCT.
+
+  loop at IT_REP assigning field-symbol(<FS_REP>).
+*1st Ledger
+    loop at IT_REP_TEMP assigning field-symbol(<T1>) where
+      RLDNR = S1_RLDNR-LOW
+      and RBUKRS = <FS_REP>-RBUKRS
+      and GJAHR = <FS_REP>-GJAHR
+*        AND poper = <fs_rep>-poper
+      and RACCT = <FS_REP>-RACCT.
+      <FS_REP>-01_HSL = <FS_REP>-01_HSL + <T1>-01_HSL.
+      <FS_REP>-01_RHCUR = <T1>-01_RHCUR.
+      <FS_REP>-01_KSL = <FS_REP>-01_KSL + <T1>-01_KSL.
+      <FS_REP>-01_RKCUR = <T1>-01_RKCUR.
+      if R_OSV is not initial.
+        if <T1>-POPER not in SH_POPER.
+          <FS_REP>-01_HSLS = <FS_REP>-01_HSLS + <T1>-01_HSL.
+          <FS_REP>-01_KSLS = <FS_REP>-01_KSLS + <T1>-01_KSL.
+        elseif <T1>-POPER in SH_POPER and <T1>-DRCRK = 'S'.
+          <FS_REP>-01_HSLD = <FS_REP>-01_HSLD + <T1>-01_HSL.
+          <FS_REP>-01_KSLD = <FS_REP>-01_KSLD + <T1>-01_KSL.
+        elseif <T1>-POPER in SH_POPER and <T1>-DRCRK = 'H'.
+          <FS_REP>-01_HSLC = <FS_REP>-01_HSLC + <T1>-01_HSL.
+          <FS_REP>-01_KSLC = <FS_REP>-01_KSLC + <T1>-01_KSL.
+        endif.
+      endif.
+    endloop.
+    unassign <T1>.
+
+*2nd Ledger
+    loop at IT_REP_TEMP assigning field-symbol(<T2>) where
+      RLDNR = S2_RLDNR-LOW
+      and RBUKRS = <FS_REP>-RBUKRS
+      and GJAHR = <FS_REP>-GJAHR
+*        AND poper = <fs_rep>-poper
+      and RACCT = <FS_REP>-RACCT.
+      <FS_REP>-02_HSL = <FS_REP>-02_HSL + <T2>-01_HSL.
+      <FS_REP>-02_RHCUR = <T2>-01_RHCUR.
+      <FS_REP>-02_KSL = <FS_REP>-02_KSL + <T2>-01_KSL.
+      <FS_REP>-02_RKCUR = <T2>-01_RKCUR.
+      if R_OSV is not initial.
+        if <T2>-POPER not in SH_POPER.
+          <FS_REP>-02_HSLS = <FS_REP>-02_HSLS + <T2>-01_HSL.
+          <FS_REP>-02_KSLS = <FS_REP>-02_KSLS + <T2>-01_KSL.
+        elseif <T2>-POPER in SH_POPER and <T2>-DRCRK = 'S'.
+          <FS_REP>-02_HSLD = <FS_REP>-02_HSLD + <T2>-01_HSL.
+          <FS_REP>-02_KSLD = <FS_REP>-02_KSLD + <T2>-01_KSL.
+        elseif <T2>-POPER in SH_POPER and <T2>-DRCRK = 'H'.
+          <FS_REP>-02_HSLC = <FS_REP>-02_HSLC + <T2>-01_HSL.
+          <FS_REP>-02_KSLC = <FS_REP>-02_KSLC + <T2>-01_KSL.
+        endif.
+      endif.
+    endloop.
+    unassign <T2>.
+*Delta
+    <FS_REP>-12_HSL = <FS_REP>-01_HSL - <FS_REP>-02_HSL.
+    if R_OSV is not initial.
+      <FS_REP>-12_HSLS = <FS_REP>-01_HSLS - <FS_REP>-02_HSLS.
+      <FS_REP>-12_HSLD = <FS_REP>-01_HSLD - <FS_REP>-02_HSLD.
+      <FS_REP>-12_HSLC = <FS_REP>-01_HSLC - <FS_REP>-02_HSLC.
+    endif.
+    <FS_REP>-12_RHCUR = <FS_REP>-01_RHCUR.
+    <FS_REP>-12_KSL = <FS_REP>-01_KSL - <FS_REP>-02_KSL.
+    if R_OSV is not initial.
+      <FS_REP>-12_KSLS = <FS_REP>-01_KSLS - <FS_REP>-02_KSLS.
+      <FS_REP>-12_KSLD = <FS_REP>-01_KSLD - <FS_REP>-02_KSLD.
+      <FS_REP>-12_KSLC = <FS_REP>-01_KSLC - <FS_REP>-02_KSLC.
+    endif.
+    <FS_REP>-12_RKCUR = <FS_REP>-01_RKCUR.
+
+*Additiona data
+
+    select single TXT50
+      from SKAT
+      inner join T001 on SKAT~KTOPL eq T001~KTOPL
+      into @<FS_REP>-TXT50
+      where T001~BUKRS = @<FS_REP>-RBUKRS
+        and SKAT~SAKNR = @<FS_REP>-RACCT
+        and SKAT~SPRAS = @P_LANGU.
+    select single ALTKT, MITKZ
+      from SKB1
+      into ( @<FS_REP>-ALTKT, @<FS_REP>-MITKZ )
+      where SAKNR = @<FS_REP>-RACCT
+        and BUKRS = @<FS_REP>-RBUKRS.
+    select single TXT50
+      from SKAT
+      inner join T001 on SKAT~KTOPL eq T001~KTOP2
+      into @<FS_REP>-AL_TXT
+      where T001~BUKRS = @<FS_REP>-RBUKRS
+        and SKAT~SAKNR = @<FS_REP>-ALTKT
+        and SKAT~SPRAS = @P_LANGU.
+
+  endloop.
+endform.
+*&---------------------------------------------------------------------*
+
+
+*&---------------------------------------------------------------------*
+form SHOW_ALV .
+**************************************
+  call function 'LVC_FIELDCATALOG_MERGE'
+    exporting
+      I_STRUCTURE_NAME       = 'ZFI_COMP_LEDGERS'
+    changing
+      CT_FIELDCAT            = FCAT
+    exceptions
+      INCONSISTENT_INTERFACE = 1
+      PROGRAM_ERROR          = 2
+      others                 = 3.
+  if SY-SUBRC <> 0.
+  endif.
+
+  loop at FCAT assigning field-symbol(<F>).
+    case <F>-FIELDNAME.
+        when 'RLDNR'. <F>-TECH = ABAP_TRUE.
+      when 'RBUKRS'. <F>-NO_OUT = ABAP_TRUE.
+      when 'GJAHR'. <F>-NO_OUT = ABAP_TRUE.
+      when 'POPER'. <F>-TECH = ABAP_TRUE.
+      when 'DRCRK'. <F>-TECH = ABAP_TRUE.
+        when 'RACCT'. <F>-KEY = ABAP_TRUE.
+        when others.
+        case <F>-FIELDNAME+0(3).
+          when '01_'.
+            <F>-EMPHASIZE = 'C210'.
+            <F>-COLTEXT   = S1_RLDNR-LOW  && <F>-COLTEXT.
+            <F>-SCRTEXT_L = S1_RLDNR-LOW  && <F>-SCRTEXT_L.
+            <F>-SCRTEXT_M = S1_RLDNR-LOW  && <F>-SCRTEXT_M.
+            <F>-SCRTEXT_S = S1_RLDNR-LOW  && <F>-SCRTEXT_S.
+          when '02_'.
+            <F>-EMPHASIZE = 'C410'.
+            <F>-COLTEXT   = S2_RLDNR-LOW  && <F>-COLTEXT.
+            <F>-SCRTEXT_L = S2_RLDNR-LOW  && <F>-SCRTEXT_L.
+            <F>-SCRTEXT_M = S2_RLDNR-LOW  && <F>-SCRTEXT_M.
+            <F>-SCRTEXT_S = S2_RLDNR-LOW  && <F>-SCRTEXT_S.
+          when '12_'.
+            <F>-EMPHASIZE = 'C510'.
+            <F>-COLTEXT   = 'Δ'  && <F>-COLTEXT.
+            <F>-SCRTEXT_L = 'Δ'  && <F>-SCRTEXT_L.
+            <F>-SCRTEXT_M = 'Δ'  && <F>-SCRTEXT_M.
+            <F>-SCRTEXT_S = 'Δ'  && <F>-SCRTEXT_S.
+          when others.
+        endcase.
+        if <F>-FIELDNAME+4(2) = 'SL'. <F>-DO_SUM = ABAP_TRUE. endif.
+        if ( <F>-FIELDNAME+3(3) = 'HSL' or <F>-FIELDNAME+3(3) = 'RHC' ) and P_BRL = ABAP_FALSE.
+          <F>-TECH = ABAP_TRUE.
+        endif.
+        if ( <F>-FIELDNAME+3(3) = 'KSL' or <F>-FIELDNAME+3(3) = 'RKC' ) and P_USD = ABAP_FALSE.
+          <F>-TECH = ABAP_TRUE.
+        endif.
+        if <F>-FIELDNAME+2(1) = '_' and ( <F>-FIELDNAME+6(1) = 'S' or <F>-FIELDNAME+6(1) = 'D' or <F>-FIELDNAME+6(1) = 'C' ).
+          if R_OSV is not initial.
+            case  <F>-FIELDNAME+6(1).
+              when 'S'.
+                <F>-COLTEXT   = 'SB' && ':' && <F>-COLTEXT.
+                <F>-SCRTEXT_L = 'SB' && ':' && <F>-SCRTEXT_L.
+                <F>-SCRTEXT_M = 'SB' && ':' && <F>-SCRTEXT_M.
+                <F>-SCRTEXT_S = 'SB' && ':' && <F>-SCRTEXT_S.
+              when 'D'.
+                <F>-COLTEXT   = 'Dr' && ':' && <F>-COLTEXT.
+                <F>-SCRTEXT_L = 'Dr' && ':' && <F>-SCRTEXT_L.
+                <F>-SCRTEXT_M = 'Dr' && ':' && <F>-SCRTEXT_M.
+                <F>-SCRTEXT_S = 'Dr' && ':' && <F>-SCRTEXT_S.
+                <F>-EMPHASIZE+2(1) = '0'.
+              when 'C'.
+                <F>-COLTEXT   = 'Cr' && ':' && <F>-COLTEXT.
+                <F>-SCRTEXT_L = 'Cr' && ':' && <F>-SCRTEXT_L.
+                <F>-SCRTEXT_M = 'Cr' && ':' && <F>-SCRTEXT_M.
+                <F>-SCRTEXT_S = 'Cr' && ':' && <F>-SCRTEXT_S.
+                <F>-EMPHASIZE+2(1) = '0'.
+              when others.
+                <F>-COLTEXT   = 'EB' && ':' && <F>-COLTEXT.
+                <F>-SCRTEXT_L = 'EB' && ':' && <F>-SCRTEXT_L.
+                <F>-SCRTEXT_M = 'EB' && ':' && <F>-SCRTEXT_M.
+                <F>-SCRTEXT_S = 'EB' && ':' && <F>-SCRTEXT_S.
+            endcase.
+          else.
+            <F>-TECH = ABAP_TRUE.
+          endif.
+        endif.
+    endcase.
+  endloop.
+
+
+**************************************
+  GS_LAYOUT_FM-CWIDTH_OPT = 'X'.
+  GS_LAYOUT_FM-ZEBRA = 'X'.
+
+
+**************************************
+  call function 'REUSE_ALV_GRID_DISPLAY_LVC'
+    exporting
+      IS_LAYOUT_LVC            = GS_LAYOUT_FM
+      I_CALLBACK_PROGRAM       = SY-CPROG
+      I_CALLBACK_PF_STATUS_SET = 'SETPF'
+      I_CALLBACK_USER_COMMAND  = 'UCOMM'
+      I_GRID_SETTINGS          = GLAY
+      IT_FIELDCAT_LVC          = FCAT
+    tables
+      T_OUTTAB                 = IT_REP
+    exceptions
+      PROGRAM_ERROR            = 1
+      others                   = 2.
+  if SY-SUBRC <> 0.
+  endif.
+endform.
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+form UCOMM using R_UCOMM like SY-UCOMM
+   RS_SELFIELD type SLIS_SELFIELD.
+  RS_SELFIELD-REFRESH = 'X'.
+  case R_UCOMM.
+    when 'EXIT'.
+      set screen 0.
+    when '&IC1'.
+      data: LS_REP like line of IT_REP.
+      data LDG(2).
+      read table IT_REP into LS_REP index RS_SELFIELD-TABINDEX.
+      check LS_REP-RACCT is not initial.
+      data(SO_RAC) = value RSDSSELOPT_T( SIGN = 'I' OPTION = 'EQ' ( LOW = LS_REP-RACCT ) ).
+      case  RS_SELFIELD-SEL_TAB_FIELD+2(3).
+        when '01_'. LDG = S1_RLDNR-LOW.
+        when '02_'. LDG = S2_RLDNR-LOW.
+        when others. exit.
+      endcase.
+      case 'X'.
+        when R_BS.
+          data(SO_PER) = value RSDSSELOPT_T( SIGN = 'I' OPTION = 'LE' ( LOW = SO_GJAHR-LOW && SO_POPER-LOW ) ).
+        when R_PL.
+          SO_PER = value RSDSSELOPT_T( SIGN = 'I' OPTION = 'BT' ( LOW = SO_GJAHR-LOW && SH_POPER-LOW HIGH = SO_GJAHR-LOW && SH_POPER-HIGH ) ).
+        when R_OSV.
+          case  RS_SELFIELD-SEL_TAB_FIELD+8(1).
+            when 'S'. SO_PER = value RSDSSELOPT_T( SIGN = 'I' OPTION = 'LT' ( LOW = SO_GJAHR-LOW && SH_POPER-LOW ) ).
+            when ''. SO_PER = value RSDSSELOPT_T( SIGN = 'I' OPTION = 'LE' ( LOW = SO_GJAHR-LOW && SH_POPER-HIGH ) ).
+            when others. SO_PER = value RSDSSELOPT_T( SIGN = 'I' OPTION = 'BT' ( LOW = SO_GJAHR-LOW && SH_POPER-LOW HIGH = SO_GJAHR-LOW && SH_POPER-HIGH ) ).
+          endcase.
+        when others.
+      endcase.
+      submit FAGL_ACCOUNT_ITEMS_GL
+          with X_OPSEL eq ABAP_FALSE
+          with X_AISEL eq ABAP_TRUE
+          with RLDNR    eq LDG
+          with SO_YRPER in SO_PER
+          with SD_SAKNR in SO_RAC
+          with SD_BUKRS in SO_BUKRS
+        and return.
+  endcase.
+endform.
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+form SETPF using RT_EXTAB type SLIS_T_EXTAB.
+  set pf-status 'STANDARD'.
+endform.
+*&---------------------------------------------------------------------*
