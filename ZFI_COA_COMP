@@ -17,6 +17,7 @@ SELECT-OPTIONS so_langu FOR sy-langu NO INTERVALS.
 PARAMETERS p_dest TYPE rfcdest DEFAULT 'PRDCLNT600_IDOC'.
 
 
+
 DATA: lt_rep TYPE STANDARD TABLE OF zfi_coa_comp,
       ls_rep LIKE LINE OF lt_rep.
 
